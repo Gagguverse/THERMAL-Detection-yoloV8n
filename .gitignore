@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+parts/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environment
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Streamlit
+.streamlit/
+
+# Logs
+*.log
+startup.log
+streamlit.err.log
+streamlit.out.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Model weights (large files - use Git LFS or download separately)
+# *.pt
+# *.weights
+
+# Local report/check scripts
+check_quotes.py
+check_quotes_out.txt
+fix_unicode.py
+
+# Uploads
+uploads/
+
+# Temp
+*.tmp
+temp/

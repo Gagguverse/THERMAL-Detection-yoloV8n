@@ -1,0 +1,282 @@
+================================================================================
+                           FINAL PROJECT REPORT
+               THERMAL BORDER SURVEILLANCE SYSTEM
+          AI-Based Person Detection & Behavior Classification
+================================================================================
+
+TEAM NAME        : Team Broken Bits
+PROJECT TYPE     : Computer Vision / Security Surveillance
+MODEL            : YOLOv8n (Fine-tuned on Thermal Dataset)
+TRACKING         : ByteTrack
+GPU USED         : RTX 3050
+TRAINING EPOCHS  : 100 (GPU) | 25 (CPU)
+TRAINING TIME    : ~4.2 hours
+STATUS           : Demo Ready
+
+================================================================================
+1. PROJECT SUMMARY
+================================================================================
+
+Manual border and perimeter monitoring is manpower-intensive and prone to
+fatigue-driven misses, especially at night. Guards monitoring thermal or
+low-light feeds often miss intrusions due to low visibility, absence of color
+and texture cues, and human fatigue.
+
+This project is an AI-based thermal surveillance system that processes thermal
+and low-light video to:
+- Detect people using a fine-tuned YOLOv8n model
+- Track them across frames using ByteTrack (persistent IDs)
+- Classify movement behavior (crouching, group movement, walking, stationary)
+- Generate confirmed alerts only after sustained suspicious behavior
+- Filter out non-human objects (vehicles, animals) to reduce false alarms
+- Simulate multi-camera fusion for cross-camera confirmation
+
+The output is an annotated video with bounding boxes, track IDs, suspicion
+scores, and alert labels, helping security operators make faster decisions.
+
+================================================================================
+2. PROBLEM STATEMENT
+================================================================================
+
+- Manual border monitoring requires many guards working in shifts.
+- Fatigue causes missed detections, especially during night shifts.
+- Thermal imagery has low resolution and no color/texture, making human
+  detection difficult for both humans and basic algorithms.
+- Simple motion detectors trigger too many false alarms from animals,
+  vehicles, or environmental noise.
+
+================================================================================
+3. SOLUTION OVERVIEW
+================================================================================
+
+An end-to-end pipeline that takes thermal input (image, video, or live camera)
+and produces an annotated output with detection, tracking, classification, and
+alerts.
+
+Key capabilities:
+- Person detection in thermal footage
+- Persistent tracking of individuals across frames
+- Rule-based movement behavior classification
+- Confirmed alert system (multi-frame persistence)
+- Non-human object filtering
+- Simulated multi-camera fusion
+- Three input modes: Image, Video, Live Camera
+
+================================================================================
+4. TECHNICAL STACK
+================================================================================
+
+- Language        : Python 3.12
+- UI Framework    : Streamlit
+- Detection Model : Ultralytics YOLOv8n (best.pt)
+- Tracker         : ByteTrack (via Ultralytics)
+- Image Processing: OpenCV (CLAHE, drawing, video I/O)
+- Video Encoding  : imageio-ffmpeg (H.264 for browser compatibility)
+- Live Camera     : streamlit-webrtc (WebRTC)
+- Training GPU    : RTX 3050
+- Model Weights   : best.pt (thermal), yolov8s.pt (general COCO for live cam)
+
+================================================================================
+5. DATASET
+================================================================================
+
+Source        : FLIR Thermal Dataset (via Roboflow)
+Classes       : 5 (bicycle, car, dog, empty, person)
+Limitation    : Small dataset, imbalanced toward vehicles, low thermal resolution
+Mitigation    : CLAHE contrast enhancement applied to every frame before detection
+
+================================================================================
+6. COMPLETE PIPELINE (STAGE-BY-STAGE)
+================================================================================
+
+STAGE 1: INPUT
+-----------
+Thermal image, recorded video, or live camera feed (webcam / DroidCam phone).
+
+STAGE 2: CLAHE PREPROCESSING
+---------------------------
+Every frame is enhanced using CLAHE (Contrast Limited Adaptive Histogram
+Equalization). This improves contrast in low-contrast thermal images and
+counteracts thermal blooming (heat bleeding into nearby pixels).
+
+STAGE 3: OBJECT DETECTION (YOLOv8n)
+----------------------------------
+A fine-tuned YOLOv8n model (best.pt) detects objects in each frame:
+- Person
+- Car
+- Bicycle
+- Dog
+- Empty
+
+Confidence threshold: 0.15 (video) / 0.25 (image).
+Only "person" class is tracked; others are labeled "non-threat (filtered)".
+
+STAGE 4: OBJECT TRACKING (ByteTrack)
+------------------------------------
+ByteTrack assigns a unique, persistent ID to every detected person. The same
+person keeps the same ID across frames even during partial occlusion, enabling
+motion history analysis.
+
+STAGE 5: MOVEMENT CLASSIFICATION (Rule-Based)
+--------------------------------------------
+Using track history (last 15 frames), each person is classified:
+
+Behavior              | Detection Logic                              | Suspicion Score
+----------------------|----------------------------------------------|----------------
+Crouching/Crawling    | Box height/width ratio drops below baseline  | 0.85 (High)
+Group Movement        | 2+ persons close, moving same direction      | 0.55 (Elevated)
+Normal Walking        | Default movement, speed > 1.0 px/frame       | 0.20 (Low)
+Stationary            | Barely moving                                | 0.10 (Low)
+Observing             | Insufficient history (< 5 frames)            | 0.10 (Low)
+
+STAGE 6: SUSPICION SCORING + ALERT CONFIRMATION
+----------------------------------------------
+Each behavior carries a suspicion score. An alert is confirmed only if high
+suspicion (>= 0.5) persists for 8 consecutive frames. This prevents false
+alarms from single noisy frames.
+
+STAGE 7: MULTI-CAMERA FUSION (Simulated)
+----------------------------------------
+A single frame is split into two overlapping virtual camera zones:
+- Cam A: Left 65% of frame
+- Cam B: Right 35% of frame
+- Overlap Zone: Middle 35%-65% region seen by both
+
+If a person is detected in the overlap zone, they are marked [A+B]
+(cross-camera confirmed) and receive a +15% suspicion boost. This simulates
+how a real multi-camera system would confirm a threat across cameras.
+
+NOTE: This is simulated on a single feed, not tested with genuine
+multi-camera hardware.
+
+STAGE 8: OUTPUT (ANNOTATED VIDEO)
+---------------------------------
+Final video with:
+- Colored bounding boxes (Red = Alert, Orange = Elevated, Green = Normal, Yellow = Non-human)
+- Track IDs (#1, #2, etc.)
+- Movement labels (crouching, walking, still, observing)
+- Suspicion scores (0.00 to 1.00)
+- Camera fusion tags ([A], [B], [A+B])
+- Alert prefix (ALERT) on confirmed threats
+
+================================================================================
+7. OUTPUT COLOR CODE
+================================================================================
+
+Color  | Meaning
+-------|------------------------------------------
+Red    | Confirmed ALERT (suspicion sustained 8+ frames)
+Orange | Elevated suspicion (>= 0.5, not yet confirmed)
+Green  | Normal activity
+Yellow | Non-human object (filtered - car, bicycle, etc.)
+
+================================================================================
+8. APPLICATION MODES
+================================================================================
+
+MODE 1: IMAGE DETECTION
+- Upload thermal image (jpg, jpeg, png)
+- YOLOv8n detects all classes
+- Shows person count, non-human count, per-person confidence scores
+
+MODE 2: VIDEO PROCESSING (FULL PIPELINE)
+- Upload thermal video (mp4, mov, avi)
+- Runs detection -> tracking -> classification -> alerts
+- Output: annotated video with progress bar
+- Summary: confirmed alerts count, threat status (THREAT DETECTED / ALL CLEAR)
+
+MODE 3: LIVE CAMERA
+- WebRTC-based live camera feed
+- Uses general YOLOv8s model (COCO classes)
+- Tags people as THREAT / NORMAL / SAFE based on movement
+- Supports DroidCam / phone camera via virtual webcam
+
+================================================================================
+9. FILE STRUCTURE
+================================================================================
+
+thermal-border-surveillance/
+├── app.py                 # Streamlit UI (Image / Video / Live Camera)
+├── app_backup.py          # Backup version of app
+├── train.py               # CPU training script (25 epochs)
+├── train_gpu.py           # GPU training script (100 epochs, RTX 3050)
+├── resume.py              # Resume training from checkpoint
+├── track_analyze.py       # CLI pipeline: detection + tracking + classification
+├── make_demo_video.py     # Utility to synthesize demo video from dataset
+├── verify_dataset.py      # Dataset verification tool
+├── data.yaml              # Dataset configuration (5 classes)
+├── best.pt                # Trained thermal detection model
+├── yolov8s.pt             # General COCO model for live camera
+├── requirements.txt       # Python dependencies
+├── README.md              # Project documentation
+├── demo_screenshots/      # Sample output images
+├── weights/               # Model weights directory
+└── FINAL_REPORT.txt       # This report
+
+================================================================================
+10. HOW TO RUN
+================================================================================
+
+Step 1: Install dependencies
+    pip install -r requirements.txt
+    pip install streamlit-webrtc imageio-ffmpeg
+
+Step 2: Run the Streamlit app
+    python -m streamlit run app.py --server.port 8501
+
+Step 3: Open browser
+    http://localhost:8501
+
+Using Phone Camera (DroidCam):
+1. Install DroidCam on phone and PC
+2. Connect phone via WiFi using DroidCam client on PC
+3. Open http://localhost:8501 -> Live Camera tab
+4. Select DroidCam as camera source in browser permission dialog
+
+================================================================================
+11. KEY FEATURES
+================================================================================
+
+- Thermal person detection using fine-tuned YOLOv8n
+- Multi-object tracking with persistent IDs (ByteTrack)
+- Movement behavior classification (crouching, group, walking, stationary)
+- Confirmed alert system (8-frame confirmation to reduce false alarms)
+- Non-human object filtering with explicit labels
+- Simulated multi-camera fusion with cross-camera confirmation
+- CLAHE thermal contrast enhancement
+- Three input modes: Image, Video, Live Camera
+- Annotated output video with track IDs and suspicion scores
+- Train on CPU or GPU (RTX 3050)
+
+================================================================================
+12. LIMITATIONS (Honest Disclosure)
+================================================================================
+
+1. Movement classification is rule-based/heuristic, not a separately trained AI model.
+2. Detection confidence is moderate (typically 0.2 - 0.9) due to small model trained briefly.
+3. Multi-camera fusion is simulated on a single feed, not tested with genuine multi-camera hardware.
+4. Thermal imagery has low resolution, no color/texture cues, and thermal blooming.
+5. Dataset is relatively small and imbalanced toward vehicles over persons.
+
+================================================================================
+13. FUTURE SCOPE
+================================================================================
+
+- Replace rule-based classification with a trained behavior classification model.
+- Integrate genuine multi-camera hardware fusion.
+- Deploy on edge devices (Jetson Nano / Raspberry Pi) for real-time drone surveillance.
+- Add night-vision RGB + thermal fusion for better accuracy.
+- Integrate with IoT alert systems (SMS, email, siren) for confirmed threats.
+
+================================================================================
+14. TEAM
+================================================================================
+
+Team Name : Team Broken Bits
+Project   : Thermal Border Surveillance - AI-Based Person Detection &
+            Behavior Classification for Border Security
+Status    : Demo Ready
+
+================================================================================
+END OF REPORT
+================================================================================
